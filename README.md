@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/philiprehberger/ts-retry-queue/actions/workflows/ci.yml/badge.svg)](https://github.com/philiprehberger/ts-retry-queue/actions/workflows/ci.yml)
 [![npm version](https://img.shields.io/npm/v/@philiprehberger/retry-queue)](https://www.npmjs.com/package/@philiprehberger/retry-queue)
-[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
+[![License](https://img.shields.io/github/license/philiprehberger/ts-retry-queue)](LICENSE)
 
 Retry queue with exponential backoff for resilient async processing.
 
