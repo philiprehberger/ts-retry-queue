@@ -120,3 +120,144 @@ describe('createQueue', () => {
     assert.ok(retryTimes[1] > retryTimes[0]);
   });
 });
+
+describe('dead letter queue', () => {
+  it('failed items are added to dead letter queue', async () => {
+    const queue = createQueue<string>({
+      process: async () => { throw new Error('fail'); },
+      maxRetries: 1,
+      retryDelay: 5,
+      onFailure: () => {},
+    });
+    queue.add('doomed');
+    await wait(200);
+    const dlq = queue.getDeadLetterItems();
+    assert.equal(dlq.length, 1);
+    assert.equal(dlq[0].item, 'doomed');
+    assert.equal(dlq[0].error.message, 'fail');
+    assert.equal(dlq[0].attempts, 1);
+    assert.equal(queue.deadLetterCount, 1);
+  });
+
+  it('clearDeadLetterQueue empties the dead letter queue', async () => {
+    const queue = createQueue<string>({
+      process: async () => { throw new Error('fail'); },
+      maxRetries: 1,
+      retryDelay: 5,
+      onFailure: () => {},
+    });
+    queue.add('a');
+    await wait(200);
+    assert.equal(queue.deadLetterCount, 1);
+    queue.clearDeadLetterQueue();
+    assert.equal(queue.deadLetterCount, 0);
+    assert.deepEqual(queue.getDeadLetterItems(), []);
+  });
+
+  it('getDeadLetterItems returns a copy', async () => {
+    const queue = createQueue<string>({
+      process: async () => { throw new Error('fail'); },
+      maxRetries: 1,
+      retryDelay: 5,
+      onFailure: () => {},
+    });
+    queue.add('a');
+    await wait(200);
+    const items = queue.getDeadLetterItems();
+    items.length = 0;
+    assert.equal(queue.deadLetterCount, 1);
+  });
+});
+
+describe('jitter', () => {
+  it('full jitter produces delay less than or equal to raw backoff', async () => {
+    const retryTimes: number[] = [];
+    let start = Date.now();
+    const queue = createQueue<string>({
+      process: async () => { throw new Error('fail'); },
+      maxRetries: 2,
+      retryDelay: 50,
+      jitter: 'full',
+      onRetry: () => {
+        retryTimes.push(Date.now() - start);
+        start = Date.now();
+      },
+    });
+    queue.add('test');
+    await wait(1000);
+    // full jitter: delay is random between 0 and backoff, so should be <= raw backoff
+    // raw backoff for attempt 1 = 50 * 2^1 = 100
+    assert.equal(retryTimes.length, 1);
+    assert.ok(retryTimes[0] <= 150); // generous upper bound
+  });
+
+  it('decorrelated jitter produces delays', async () => {
+    const retries: number[] = [];
+    const queue = createQueue<string>({
+      process: async () => { throw new Error('fail'); },
+      maxRetries: 2,
+      retryDelay: 10,
+      jitter: 'decorrelated',
+      onRetry: (_item, attempt) => retries.push(attempt),
+    });
+    queue.add('test');
+    await wait(1000);
+    assert.equal(retries.length, 1);
+  });
+});
+
+describe('max queue length', () => {
+  it('reject-new strategy rejects when queue is full', () => {
+    const queue = createQueue<string>({
+      process: async () => { await wait(5000); },
+      maxQueueLength: 2,
+      overflowStrategy: 'reject-new',
+    });
+    queue.pause();
+    assert.equal(queue.add('a'), true);
+    assert.equal(queue.add('b'), true);
+    assert.equal(queue.add('c'), false);
+    assert.equal(queue.pending, 2);
+  });
+
+  it('drop-oldest strategy removes oldest item', () => {
+    const queue = createQueue<string>({
+      process: async () => { await wait(5000); },
+      maxQueueLength: 2,
+      overflowStrategy: 'drop-oldest',
+    });
+    queue.pause();
+    queue.add('a');
+    queue.add('b');
+    queue.add('c');
+    assert.equal(queue.pending, 2);
+  });
+
+  it('defaults to reject-new strategy', () => {
+    const queue = createQueue<string>({
+      process: async () => { await wait(5000); },
+      maxQueueLength: 1,
+    });
+    queue.pause();
+    assert.equal(queue.add('a'), true);
+    assert.equal(queue.add('b'), false);
+  });
+});
+
+describe('item timeout', () => {
+  it('timed out items trigger onTimeout and go to dead letter queue', async () => {
+    const timedOut: string[] = [];
+    const queue = createQueue<string>({
+      process: async () => { throw new Error('fail'); },
+      maxRetries: 5,
+      retryDelay: 50,
+      itemTimeout: 80,
+      onTimeout: (item) => timedOut.push(item),
+    });
+    queue.add('slow');
+    await wait(1000);
+    assert.ok(timedOut.includes('slow'));
+    const dlq = queue.getDeadLetterItems();
+    assert.ok(dlq.some((d) => d.item === 'slow'));
+  });
+});

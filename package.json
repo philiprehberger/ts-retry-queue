@@ -1,6 +1,6 @@
 {
   "name": "@philiprehberger/retry-queue",
-  "version": "0.1.2",
+  "version": "0.2.0",
   "description": "Retry queue with exponential backoff for resilient async processing",
   "keywords": [
     "queue",

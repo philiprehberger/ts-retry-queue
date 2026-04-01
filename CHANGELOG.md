@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.2.0
+
+- Add dead letter queue for permanently failed items
+- Add jitter to exponential backoff (full and decorrelated modes)
+- Add max queue length with overflow strategy
+- Add per-item timeout with onTimeout callback
+
 ## 0.1.2
 
 - Standardize README to 3-badge format with emoji Support section
